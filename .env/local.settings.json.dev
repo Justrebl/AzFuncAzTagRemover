@@ -1,0 +1,15 @@
+{
+    "IsEncrypted": false,
+    "Values": {
+        "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+        "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
+        "userAssignedIdentityId": "",
+        "TenantId":"",
+        "SubscriptionIds":"fbcfc68c-3c2e-4ff7-xxxxxxxx, 9c149195-a0e8-xxxxxxxx",
+        "CronSchedule":"*/5 * * * * *", 
+        "TargetTagKey":"env",
+        "TargetTagValue":"trash",
+        "UniqueResourceGroupName":"",
+        "CaseSensitiveTags":"false"
+    }
+}
