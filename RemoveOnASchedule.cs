@@ -16,7 +16,11 @@ namespace AzFuncAzTagRemover
         private readonly ConfigManager _configManager;
         //Private Fields necessary for proper execution of the function 
         private readonly ILogger _logger;
-        private readonly ArmClient _armClient;        
+        private readonly ArmClient _armClient;
+        private int _nbSubscriptionProcessed = 0;
+        private int _nbResourceGroupsProcessed = 0;
+        private int _nbResourcesDeleted = 0;
+        private int _nbResourcesChecked = 0;       
 
         public RemoveOnASchedule(ILoggerFactory loggerFactory)
         {
@@ -24,12 +28,7 @@ namespace AzFuncAzTagRemover
             _configManager = new ConfigManager(_logger);
             //Required : https://learn.microsoft.com/en-us/dotnet/api/overview/azure/identity-readme?view=azure-dotnet
             //Details on Authenticating to Azure using DefaultAzureCredential : https://docs.microsoft.com/en-us/dotnet/api/azure.identity.defaultazurecredential?view=azure-dotnet
-            
-            if (_configManager._tenantId != null)
-                { _armClient = new ArmClient(new DefaultAzureCredential(new DefaultAzureCredentialOptions { TenantId = _configManager._tenantId }));}
-            else 
-                //Select default tenant if not set explicitly 
-                { _armClient = new ArmClient(new DefaultAzureCredential()); }
+            _armClient = new ArmClient(new DefaultAzureCredential(new DefaultAzureCredentialOptions { TenantId = _configManager._tenantId }));
         }
 
         [Function("RemoveOnASchedule")]
@@ -44,35 +43,51 @@ namespace AzFuncAzTagRemover
             //TODO: replace with a REST API call that will extract all the resources with a tag specified.
             //RESOURCE: More details here : https://github.com/Azure/azure-sdk-for-net/blob/main/doc/dev/mgmt_quickstart.md#managing-existing-resources-by-id
             
-            //Retrieve subscriptions attached to an authenticated identity
-            SubscriptionCollection subCollection = _armClient.GetSubscriptions();
+            //Retrieve subscriptions attached to an authenticated identity and selected Azure AD Tenant
+            SubscriptionCollection allSubscriptions = _armClient.GetSubscriptions();
+
+            //If a list of subscriptions is set in the app config, then only process these, otherwise process all subscriptions attached to the authenticated identity and selected Azure AD Tenant
+            string[] subscriptionIdsToBeProcessed = _configManager._subscriptionIds.Length > 0 
+                ? _configManager._subscriptionIds 
+                : allSubscriptions.Select(sub => sub.Data.SubscriptionId).ToArray();
             
-            if ( _configManager._subscriptionIds is null || _configManager._subscriptionIds.Count() == 0)
-            {
-                _logger.LogError("One or more Subscription Ids, comma separated values, are required for this function to process as expected. Aborting any further action."); 
-                //Exit the function
-                return;
-            }
-            
-            //For each subscription specified in the environment variable, execute the function below
-            foreach (string subscriptionId in _configManager._subscriptionIds)
-            {
+            /* For each :
+             * - subscription Id specified in the app config 
+             * - OR subscriptions in the specified Tenant if no subscription Id defined in the app config
+             */
+            foreach (string subscriptionId in subscriptionIdsToBeProcessed)
+            {                
+                //Increment the number of subscription processed
+                _nbSubscriptionProcessed++;
+
                 //Connect to the subscription being processed in the loop 
-                SubscriptionResource subscription = await subCollection.GetAsync(subscriptionId);
+                SubscriptionResource subscription = await allSubscriptions.GetAsync(subscriptionId);
 
-                //Retrieve a list of resource groups defined in the said subscription
-                ResourceGroupCollection resourceGroups = subscription.GetResourceGroups();
+                _logger.LogInformation( @$"SUBSCRIPTION: ... Processing subscription named '{subscription.Data.DisplayName}' ...");
 
-                _logger.LogInformation( @$"=========================
-                                        Processing subscription named: {subscription.Data.DisplayName}
-                                        =========================");
-                //For each resource group in the subscription 
-                foreach (var resourceGroup in resourceGroups)
+                //Retrieve a list of resource groups existing in the parsed subscription
+                ResourceGroupCollection currentSubscriptionResourceGroups = subscription.GetResourceGroups();
+
+                //If a list of resource group is set in the app config, then only process these, otherwise process all resource group existing in the current subscription
+                var resourceGroupsToBeProcessed = _configManager._resourceGroups.Length > 0 
+                    ? currentSubscriptionResourceGroups.Where(rg => _configManager._resourceGroups.Contains(rg.Data.Name)) 
+                    : currentSubscriptionResourceGroups;
+                
+                //For each resource group in the current subscription OR selected in the app config
+                foreach (var resourceGroup in resourceGroupsToBeProcessed)
                 {
+                    _logger.LogInformation($"RESOURCE GROUP: ... Processing resource group named '{resourceGroup.Data.Name}' ...");
+
+                    //Increment the number of resource groups processed
+                    _nbResourceGroupsProcessed++;
+
                     var resources = resourceGroup.GetGenericResources();
 
                     foreach(var resource in resources)
                     {
+                        //Increment the number of resources checked
+                        _nbResourcesChecked++;
+
                         //Identify resources with the same tag and value as targeted : 
                         // Case sensitive or Non case sensitive comparison based on configuration 
                         if (
@@ -105,8 +120,11 @@ namespace AzFuncAzTagRemover
                             catch(ArgumentException e){_logger.LogError($"Error while comparing dates : {e.Message}"); break;}
 
                             //Process the actual resource deletion based on a deleteBy tag set to today/past, or if no deleteBy tag has been set at all
-                                    _logger.LogInformation(
-                                        $"{_configManager.executionMode.ToString().ToUpper()}: {resource.Data.Name} will be deleted now as {(deleteBy <= DateTime.Now ? "'Delete By' Tag is set to : " + deleteBy.ToShortDateString() : "No 'Delete By' Tag was set")})");
+                            _logger.LogDebug(
+                                $"{_configManager.executionMode.ToString().ToUpper()}: {resource.Data.Name} will be deleted now as {(deleteBy <= DateTime.Now ? "'Delete By' Tag is set to : " + deleteBy.ToShortDateString() : "No 'Delete By' Tag was set")})");
+                            
+                            //Increment the counter of resources that got deleted
+                            _nbResourcesDeleted++;
 
                             //Will process deletion based on the execution mode set in the configuration
                             switch(_configManager.executionMode){
@@ -129,6 +147,9 @@ namespace AzFuncAzTagRemover
                     }
                 }
             }
+
+            //Log the end of the process with the number of resources deleted
+            _logger.LogInformation($"Azure Resource Cleaner ended at : {DateTime.Now} | Execution mode : {_configManager.executionMode.ToString()} | {_nbSubscriptionProcessed} subscriptions processed | {_nbResourceGroupsProcessed} resource groups processed | {_nbResourcesChecked} resources checked | {_nbResourcesDeleted} resources deleted");
         }        
     }
 }
