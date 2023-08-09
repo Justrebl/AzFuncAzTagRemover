@@ -1,3 +1,6 @@
+To be deployed in an Azure Function (whatever pricing tier would do).
+Configuration template and format provided in ./.env/local.settings.dev.json
+
 No need to specify any kind of identity as DefaultCredential() will do the job for you. 
 Make sure to be connected to at least an account in the environment you're developing in : 
 ``` bash
