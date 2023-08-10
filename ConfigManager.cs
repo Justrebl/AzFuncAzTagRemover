@@ -94,7 +94,7 @@ namespace AzFuncAzTagRemover
             _logger.LogDebug(@$"Azure Function executing with the following parameters : 
                 Execution Mode: {executionMode}
                 Target Tag: <{_targetTag.Key}:{_targetTag.Value}>
-                Target Tag Case Sensitive: {_caseSensitiveTags}
+                Target Tag Case Sensitive: {_ignoreCase}
                 Delete By Tag: {_deleteByTagKey}
                 Date Time Format: {_dateTimeFormat}
                 Tenant Id: {_tenantId}
