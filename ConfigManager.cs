@@ -1,3 +1,4 @@
+using Azure.ResourceManager.Resources;
 using Justrebl.Utils;
 using Microsoft.Extensions.Logging;
 
@@ -17,7 +18,7 @@ namespace AzFuncAzTagRemover
         private readonly ILogger _logger;
         public readonly string? _tenantId;
         public readonly string[] _subscriptionIds;
-        public readonly string[] _resourceGroupNames;
+        public readonly string[] _resourceGroups;
         public readonly KeyValuePair<string, string> _targetTag;
         public readonly bool _ignoreCase;
         public readonly int _delayBeforeDeletion;
@@ -49,14 +50,20 @@ namespace AzFuncAzTagRemover
              * Not setting this variable will result in all subscriptions being processed
              * Split the subscription Ids based on a separator "," and the value of the Subscription Ids Environment Variable
              */
-            _subscriptionIds = Environment.GetEnvironmentVariable("SubscriptionIds")?.Split(separator: ",", options: StringSplitOptions.TrimEntries) ?? Array.Empty<string>();
+            _subscriptionIds = 
+                Environment.GetEnvironmentVariable("SubscriptionIds")
+                    ?.Split(separator: ",", options: StringSplitOptions.TrimEntries) 
+                ?? Array.Empty<string>();
 
             /*
              * Optional:
              * Retrieve the resource group names to be processed by the function*
              * Not setting this variable will result in all resource groups being processed
              */
-            _resourceGroupNames = Environment.GetEnvironmentVariable("ResourceGroupNames")?.Split(separator: ",", options: StringSplitOptions.TrimEntries) ?? Array.Empty<string>();
+            _resourceGroups = 
+                Environment.GetEnvironmentVariable("ResourceGroupNames")
+                    ?.Split(separator: ",", options: StringSplitOptions.TrimEntries) 
+                ?? Array.Empty<string>();
             
 
             //Define the tag that needs to be checked as a target for removal
@@ -84,14 +91,16 @@ namespace AzFuncAzTagRemover
                 executionMode = ExecutionMode.Audit;
             }
 
-            _logger.LogInformation(@$"Azure Function executing with the following parameters : 
+            _logger.LogDebug(@$"Azure Function executing with the following parameters : 
                 Execution Mode: {executionMode}
                 Target Tag: <{_targetTag.Key}:{_targetTag.Value}>
-                Target Tag Case Sensitive: {_ignoreCase}
-                Delete By Tag : {_deleteByTagKey}
-                Date Time Format : {_dateTimeFormat}
-                
-                Tenant Id: {_tenantId}");
+                Target Tag Case Sensitive: {_caseSensitiveTags}
+                Delete By Tag: {_deleteByTagKey}
+                Date Time Format: {_dateTimeFormat}
+                Tenant Id: {_tenantId}
+                Subscriptions to be processed: {(_subscriptionIds.Length > 0 ? _subscriptionIds.Length : "All")}
+                Resource Groups to be processed: {(_resourceGroups.Length > 0 ? _resourceGroups.Length : "All")}");
+
         }
     }
 }
