@@ -16,15 +16,13 @@ namespace AzFuncAzTagRemover
         private readonly ConfigManager _configManager;
         //Private Fields necessary for proper execution of the function 
         private readonly ILogger _logger;
-        private readonly ArmClient _armClient;        
+        private readonly ArmClient _armClient;
 
         public RemoveOnASchedule(ILoggerFactory loggerFactory)
         {
             _logger = loggerFactory.CreateLogger<RemoveOnASchedule>();
             _configManager = new ConfigManager(_logger);
-            //Required : https://learn.microsoft.com/en-us/dotnet/api/overview/azure/identity-readme?view=azure-dotnet
-            //Details on Authenticating to Azure using DefaultAzureCredential : https://docs.microsoft.com/en-us/dotnet/api/azure.identity.defaultazurecredential?view=azure-dotnet
-            
+
             if (_configManager._tenantId != null)
                 { _armClient = new ArmClient(new DefaultAzureCredential(new DefaultAzureCredentialOptions { TenantId = _configManager._tenantId }));}
             else 
@@ -36,12 +34,14 @@ namespace AzFuncAzTagRemover
         public async Task Run([TimerTrigger("%CronSchedule%")] MyInfo myTimer)
         {
             _logger.LogInformation($"Azure Resource Cleaner started at : {DateTime.Now}");
+
+            KeyValuePairComparer keyValuePairComparer = new KeyValuePairComparer(_configManager._ignoreCase);
             
             DateTime deleteBy = DateTime.MinValue;
+            string actualDeleteByKey = string.Empty;
 
             //TODO: Improve by filtering directly on tag keys and values, based on a genuine REST API Request as explained here : 
             //https://learn.microsoft.com/en-us/rest/api/resources/resources/list#uri-parameters
-            //TODO: replace with a REST API call that will extract all the resources with a tag specified.
             //RESOURCE: More details here : https://github.com/Azure/azure-sdk-for-net/blob/main/doc/dev/mgmt_quickstart.md#managing-existing-resources-by-id
             
             //Retrieve subscriptions attached to an authenticated identity
@@ -75,23 +75,19 @@ namespace AzFuncAzTagRemover
                     {
                         //Identify resources with the same tag and value as targeted : 
                         // Case sensitive or Non case sensitive comparison based on configuration 
-                        if (
-                            //If the resource contains the target tag and value pair in a non case sensitive manner    
-                            (!_configManager._caseSensitiveTags && resource.Data.Tags.Contains(_configManager._targetTag, new NonCaseSensitiveKeyValuePairComparer()))
-                            //Or if tag & value pair need to be case sensitive and the resource contains the target tag and value pair
-                            || _configManager._caseSensitiveTags && resource.Data.Tags.Contains(_configManager._targetTag)) {
+                        if (resource.Data.Tags.Contains(_configManager._targetTag, keyValuePairComparer)){                           
                             _logger.LogInformation($"{{{_configManager._targetTag.Key}:{_configManager._targetTag.Value}}} detected | Resource to be deleted : {resource.Data.Name}");
                             
                             //Check if the resource has a specific date to be deleted by
-                            if(resource.Data.Tags.ContainsKey(_configManager._deleteByTagKey)){
+                            if(resource.Data.Tags.ContainsKey(_configManager._deleteByTagKey, _configManager._ignoreCase, out actualDeleteByKey)){
                                 //If deleteby is set but cannot be parsed, then prevent resourse deletion for safety
-                                if(!DateTime.TryParseExact(resource.Data.Tags[_configManager._deleteByTagKey], _configManager._dateTimeFormat, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out deleteBy)){
-                                    _logger.LogError($"ABORT: \"{resource.Data.Name}\" won't be deleted for safety | Couldn't properly parse the {_configManager._deleteByTagKey} tag date : {resource.Data.Tags[_configManager._deleteByTagKey]}.");
+                                if(!DateTime.TryParseExact(resource.Data.Tags[actualDeleteByKey], _configManager._dateTimeFormat, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out deleteBy)){
+                                    _logger.LogError($"ABORT: \"{resource.Data.Name}\" won't be deleted for safety => Couldn't properly parse the '{_configManager._deleteByTagKey}' resource tag | Found: {resource.Data.Tags[actualDeleteByKey]} | Expected Date Format: {_configManager._dateTimeFormat}.");
                                     break;
                                 }
                             }
                             else {
-                                //If no deleteBy tag is set, then set it to MinValue to process deletion immediately
+                                //If no deleteBy tag is set, or cannot retrieve it, then set it to MinValue to process deletion immediately
                                 deleteBy = DateTime.MinValue;
                             }
 

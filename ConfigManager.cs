@@ -12,14 +12,14 @@ namespace AzFuncAzTagRemover
         //TODO: Implement delay before deletion of resources
         private const string DEFAULT_DELETE_BY_KEY = "DeleteBy";
         private const string DEFAULT_DATETIMEFORMAT="dd/MM/yyyy";
-        private const bool CASE_SENSITIVE_TAGS = false;
+        private const bool IGNORE_TAG_CASE = true;
 
         private readonly ILogger _logger;
         public readonly string? _tenantId;
         public readonly string[] _subscriptionIds;
         public readonly string[] _resourceGroupNames;
         public readonly KeyValuePair<string, string> _targetTag;
-        public readonly bool _caseSensitiveTags;
+        public readonly bool _ignoreCase;
         public readonly int _delayBeforeDeletion;
         public readonly string _deleteByTagKey; 
         public readonly string _dateTimeFormat;
@@ -68,12 +68,12 @@ namespace AzFuncAzTagRemover
 
             //Set the need for case sensitive tags parsing, defaults to false if not set properly 
             try {
-                _caseSensitiveTags = Environment.GetEnvironmentVariable("CaseSensitiveTags").ParseBool();
+                _ignoreCase = Environment.GetEnvironmentVariable("IgnoreTagCase").ParseBool();
             }
             // Will set default value if CaseSensitiveTags is empty or not a valid boolean value
-            catch (NullReferenceException) { _caseSensitiveTags = CASE_SENSITIVE_TAGS; }
-            catch (ArgumentException) { _caseSensitiveTags = CASE_SENSITIVE_TAGS;
-                _logger.LogError($"Unable to parse the value of the CaseSensitiveTags environment variable, setting to default value : {CASE_SENSITIVE_TAGS}.");
+            catch (NullReferenceException) { _ignoreCase = IGNORE_TAG_CASE; }
+            catch (ArgumentException) { _ignoreCase = IGNORE_TAG_CASE;
+                _logger.LogError($"Unable to parse the value of the CaseSensitiveTags environment variable, setting to default value : {IGNORE_TAG_CASE}.");
             }
 
             _dateTimeFormat = Environment.GetEnvironmentVariable("DateTimeFormat") ?? DEFAULT_DATETIMEFORMAT;
@@ -87,7 +87,7 @@ namespace AzFuncAzTagRemover
             _logger.LogInformation(@$"Azure Function executing with the following parameters : 
                 Execution Mode: {executionMode}
                 Target Tag: <{_targetTag.Key}:{_targetTag.Value}>
-                Target Tag Case Sensitive: {_caseSensitiveTags}
+                Target Tag Case Sensitive: {_ignoreCase}
                 Delete By Tag : {_deleteByTagKey}
                 Date Time Format : {_dateTimeFormat}
                 
