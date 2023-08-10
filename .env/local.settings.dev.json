@@ -9,7 +9,7 @@
         "TargetTagKey":"env", // String: Whatever tag name you want to monitor for deletion
         "TargetTagValue":"trash", // String: Whatever tag value you want to use to identify resources to delete
         "ResourceGroupName":"", // String: Can be empty, or comma separated list of resource group names
-        "CaseSensitiveTags":"false", // Boolean: true or false | Should tags and values be detected in a case sensitive manner
+        "IgnoreTagCase":"false", // Boolean: true or false | Should tags and values be detected in a case sensitive manner
         "DateOfDeletionTagKey":"DeleteBy", // String: Whatever tag  name you want to use to define from when should a resource be deleted
         "DateTimeFormat":"yyyy-MM-dd", // String: date format you want to use to define from when should a resource be deleted
         "ExecutionMode":"" //Enum : Audit | Notify | Delete
